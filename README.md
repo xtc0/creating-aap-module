@@ -4,7 +4,7 @@ In this repository, I will be sharing the steps to create, build and publish an 
 1) Successfully install AAP
 2) Go into “collections” folder and then into the “ansible_collections” folder
 3) Enter this command “ansible-galaxy collection init xtc0.basic”
-4 )After xtc0 directory has been created, use this command “cd xtc0/basic”
+4) After xtc0 directory has been created, use this command “cd xtc0/basic”
 5) You will see a structure like:
 xtc0/basic/
 ├── plugins/
