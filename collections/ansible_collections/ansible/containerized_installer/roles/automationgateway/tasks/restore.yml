@@ -1,0 +1,182 @@
+---
+- name: Set automation gateway facts
+  ansible.builtin.include_tasks: facts.yml
+
+- name: Set podman version facts
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: podman_facts.yml
+
+- name: Stop automation gateway systemd services
+  ansible.builtin.include_tasks: systemd.yml
+  vars:
+    __systemd_state: stopped
+
+- name: Unarchive the automation gateway data
+  ansible.builtin.unarchive:
+    src: '{{ hostvars["localhost"]["_backup_dir"] }}/gateway_{{ inventory_hostname }}.tar.gz'
+    dest: '{{ ansible_user_dir }}'
+    exclude:
+      - 'aap/tls'
+      - '.local/share/containers/storage/secrets/'
+      - 'aap/gateway/etc/gateway.key'
+      - 'aap/gateway/etc/gateway.cert'
+      - 'aap/gateway/etc/redis.key'
+      - 'aap/gateway/etc/redis.cert'
+      - 'aap/gateway/etc/settings.py'
+      - 'aap/gatewayproxy/etc/envoy.yaml'
+
+- name: Set automation gateway secret facts
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: restore_secrets.yml
+  vars:
+    backup_file: '{{ hostvars["localhost"]["_backup_dir"] }}/gateway_{{ inventory_hostname }}.tar.gz'
+
+- name: Update the relevant gateway secrets
+  containers.podman.podman_secret:
+    name: "{{ item }}"
+    data: "{{ lookup('ansible.builtin.vars', '__old_' + item) | b64decode }}"
+    skip_existing: '{{ _podman_idempotence | ternary(omit, true) }}'
+    force: '{{ _podman_idempotence | ternary(omit, true) }}'
+  loop:
+    - 'gateway_secret_key'
+
+- name: Override redis database and host when using cluster
+  ansible.builtin.set_fact:
+    _redis_cluster_db: 0
+    _redis_cluster_host: '{{ hostvars[groups["redis"][0]]["_redis_hostname"] }}'
+  when: redis_mode | default('cluster') == 'cluster'
+
+- name: Invalid redis cache
+  ansible.builtin.include_role:
+    name: redis
+    tasks_from: flush.yml
+  vars:
+    __redis_databases:
+      - '{{ _redis_cluster_db | default(gateway_redis_cache_db) }}'
+    __redis_host: '{{ _redis_cluster_host | default(hostvars[groups["automationgateway"][0]]["_gateway_redis_hostname"]) }}'
+    __redis_port: '{{ gateway_redis_port }}'
+    __redis_cert: '{{ gateway_conf_dir }}/redis.cert'
+    __redis_key: '{{ gateway_conf_dir }}/redis.key'
+    redis_unix_socket: false
+    redis_disable_tls: '{{ gateway_redis_disable_tls }}'
+
+- name: Reconfigure containers
+  ansible.builtin.include_tasks: containers.yml
+  vars:
+    __containers_recreate: true
+
+- name: Create postgresql CLI aliases
+  ansible.builtin.include_role:
+    name: postgresql
+    tasks_from: cli.yml
+  vars:
+    _postgresql_socket: '{{ gateway_pg_socket | default("") }}'
+    _postgresql_cert_auth: '{{ gateway_pg_cert_auth }}'
+    _postgresql_src_dir: '{{ gateway_conf_dir }}'
+    _postgresql_dest_dir: /etc/ansible-automation-platform/gateway
+
+- name: Add postgresql TLS environment variable for certificate authentication
+  ansible.builtin.set_fact:
+    _gateway_pg_restore:
+      PGSSLCERT: /etc/ansible-automation-platform/gateway/postgresql.cert
+      PGSSLKEY: /etc/ansible-automation-platform/gateway/postgresql.key
+      PGSSLROOTCERT: '{{ ca_trust_bundle }}'
+  when: gateway_pg_cert_auth | bool
+
+- name: Grant createdb role to the automation gateway postgresql user
+  community.postgresql.postgresql_user:
+    name: '{{ gateway_pg_username }}'
+    role_attr_flags: CREATEDB
+    login_host: '{{ gateway_pg_host }}'
+    login_port: '{{ gateway_pg_port }}'
+    login_user: '{{ postgresql_admin_username | default("postgres") }}'
+    login_password: '{{ postgresql_admin_password | default(omit) }}'
+    login_db: '{{ postgresql_admin_database | default("postgres") }}'
+    login_unix_socket: '{{ gateway_pg_socket | default(omit) }}'
+  run_once: true
+  when: groups.get('database', []) | length == 1 or postgresql_admin_password is defined
+
+- name: Restore the automation gateway postgresql database
+  community.postgresql.postgresql_db:
+    name: template1
+    login_host: '{{ gateway_pg_host }}'
+    login_port: '{{ gateway_pg_port }}'
+    login_user: '{{ gateway_pg_username }}'
+    login_password: '{{ gateway_pg_password | default(omit) }}'
+    login_unix_socket: '{{ gateway_pg_socket | default(omit) }}'
+    ssl_mode: '{{ gateway_pg_sslmode }}'
+    target: '{{ ansible_user_dir }}/aap/backups/{{ gateway_pg_database }}.pgc'
+    target_opts: '--create --clean --if-exists'
+    state: restore
+  environment: '{{ _gateway_pg_restore | default({}) }}'
+  run_once: true
+
+- name: Revoke createdb role to the automation gateway postgresql user
+  community.postgresql.postgresql_user:
+    name: '{{ gateway_pg_username }}'
+    role_attr_flags: NOCREATEDB
+    login_host: '{{ gateway_pg_host }}'
+    login_port: '{{ gateway_pg_port }}'
+    login_user: '{{ postgresql_admin_username | default("postgres") }}'
+    login_password: '{{ postgresql_admin_password | default(omit) }}'
+    login_db: '{{ postgresql_admin_database | default("postgres") }}'
+    login_unix_socket: '{{ gateway_pg_socket | default(omit) }}'
+  run_once: true
+  when: groups.get('database', []) | length == 1 or postgresql_admin_password is defined
+
+- name: Initialize data
+  ansible.builtin.include_tasks: init.yml
+
+- name: Start automation gateway systemd services
+  ansible.builtin.include_tasks: systemd.yml
+  vars:
+    __systemd_state: started
+
+- name: Reconfigure service nodes
+  environment:
+    SSL_CERT_FILE: '{{ _ca_tls_dir }}/extracted/pem/tls-ca-bundle.pem'
+  run_once: true
+  module_defaults:
+    group/ansible.gateway_configuration.gateway:
+      gateway_hostname: '{{ _gateway_protocol }}://{{ _gateway_hostname }}:{{ _gateway_port }}'
+      gateway_username: '{{ gateway_admin_user }}'
+      gateway_password: '{{ gateway_admin_password }}'
+      gateway_validate_certs: true
+  block:
+    - name: Gather Service Nodes
+      containers.podman.podman_container:
+        name: automation-gateway-init
+        image: '{{ _gateway_image }}'
+        command: 'aap-gateway-manage list_services'
+        detach: false
+        rm: true
+        log_driver: '{{ container_log_driver }}'
+        user: '{{ ansible_user_uid }}'
+        userns: keep-id
+        network: host
+        mount:
+          - 'type=tmpfs,destination=/var/cache/ansible-automation-platform/gateway,U=true'
+        secrets: '{{ _django_secrets }}'
+        volume: '{{ _web_volumes }}'
+        env: '{{ _common_env }}'
+      register: _list_services
+
+    - name: Set old service nodes facts
+      ansible.builtin.set_fact:
+        _old_service_nodes: "{{ _list_services.stdout_lines | select('match', '^\\s*node:') | map('regex_replace', '^\\s*node:\\s*(.*)', '\\1') | list }}"
+
+    - name: Update automation platform gateway service nodes
+      ansible.gateway_configuration.service_node:
+        name: '{{ item }}'
+        state: absent
+      with_items: '{{ _old_service_nodes }}'
+      when:
+        - item not in gateway_proxy_vars.gateway_service_nodes | map(attribute='name') | list
+
+- name: Configure automation gateway proxy resources
+  ansible.builtin.import_role:
+    name: automationgateway
+    tasks_from: postinstall.yml
+...

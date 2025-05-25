@@ -1,0 +1,65 @@
+---
+- name: Set hub nfs fact
+  ansible.builtin.set_fact:
+    _hub_nfs: '{{ hub_shared_data_path | default("") | length > 0 }}'
+
+- name: Get the automation hub data volume information
+  containers.podman.podman_volume_info:
+    name: hub_data
+  register: _data
+  when: not _hub_nfs | bool
+
+- name: Set hub data path fact
+  ansible.builtin.set_fact:
+    _hub_data_path: '{{ _hub_nfs | ternary(hub_data_dir, _data.volumes[0].Mountpoint) }}'
+
+- name: Create postgresql CLI aliases
+  ansible.builtin.include_role:
+    name: postgresql
+    tasks_from: cli.yml
+  vars:
+    _postgresql_socket: '{{ hub_pg_socket | default("") }}'
+    _postgresql_cert_auth: '{{ hub_pg_cert_auth }}'
+    _postgresql_src_dir: '{{ hub_conf_dir }}'
+    _postgresql_dest_dir: /etc/pulp/keys
+
+- name: Add postgresql TLS environment variable for certificate authentication
+  ansible.builtin.set_fact:
+    _hub_pg_dump:
+      PGSSLCERT: /etc/pulp/keys/postgresql.cert
+      PGSSLKEY: /etc/pulp/keys/postgresql.key
+      PGSSLROOTCERT: '{{ ca_trust_bundle }}'
+  when: hub_pg_cert_auth | bool
+
+- name: Backup the automation hub postgresql database
+  community.postgresql.postgresql_db:
+    name: '{{ hub_pg_database }}'
+    login_host: '{{ hub_pg_host }}'
+    login_port: '{{ hub_pg_port }}'
+    login_user: '{{ hub_pg_username }}'
+    login_password: '{{ hub_pg_password | default(omit) }}'
+    login_unix_socket: '{{ hub_pg_socket | default(omit) }}'
+    ssl_mode: '{{ hub_pg_sslmode }}'
+    target: '{{ ansible_user_dir }}/aap/backups/{{ hub_pg_database }}.pgc'
+    target_opts: '--clean --create'
+    state: dump
+  environment: '{{ _hub_pg_dump | default({}) }}'
+  run_once: true
+
+- name: Archive the automation hub data
+  ansible.containerized_installer.archive:
+    path:
+      - '{{ ansible_user_dir }}/.local/share/containers/storage/secrets'
+      - '{{ ansible_user_dir }}/aap/backups/{{ hub_pg_database }}.pgc'
+      - '{{ ansible_user_dir }}/aap/hub'
+      - '{{ ansible_user_dir }}/aap/tls'
+      - '{{ _hub_data_path }}'
+    dest: '{{ ansible_user_dir }}/aap/backups/hub.tar.gz'
+    mode: '0640'
+
+- name: Download the automation hub tarball
+  ansible.builtin.fetch:
+    src: '{{ ansible_user_dir }}/aap/backups/hub.tar.gz'
+    dest: '{{ hostvars["localhost"]["_backup_dir"] }}/hub_{{ inventory_hostname }}.tar.gz'
+    flat: true
+...

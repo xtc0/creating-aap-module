@@ -1,0 +1,16 @@
+---
+- name: Archive the postgresql data
+  ansible.containerized_installer.archive:
+    path:
+      - '{{ ansible_user_dir }}/.local/share/containers/storage/secrets'
+      - '{{ ansible_user_dir }}/aap/postgresql'
+      - '{{ ansible_user_dir }}/aap/tls'
+    dest: '{{ ansible_user_dir }}/aap/backups/postgresql.tar.gz'
+    mode: '0640'
+
+- name: Download the postgresql tarball
+  ansible.builtin.fetch:
+    src: '{{ ansible_user_dir }}/aap/backups/postgresql.tar.gz'
+    dest: '{{ hostvars["localhost"]["_backup_dir"] }}/postgresql_{{ inventory_hostname }}.tar.gz'
+    flat: true
+...

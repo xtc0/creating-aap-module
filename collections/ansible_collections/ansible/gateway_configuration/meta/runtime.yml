@@ -1,0 +1,20 @@
+---
+requires_ansible: ">=2.14.0"
+action_groups:
+  gateway:
+  - application
+  - authenticator
+  - authenticator_map
+  - http_port
+  - organization
+  - role_user_assignment
+  - route
+  - service
+  - service_cluster
+  - service_key
+  - service_node
+  - settings
+  - team
+  - token
+  - user
+...

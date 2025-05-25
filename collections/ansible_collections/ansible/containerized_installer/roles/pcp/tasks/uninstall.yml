@@ -1,0 +1,38 @@
+---
+- name: Ensure systemd unit is disabled and stopped
+  ansible.builtin.systemd:
+    name: pcp.service
+    state: stopped
+    enabled: false
+    scope: user
+  failed_when: false
+
+- name: Reset pcp systemd unit
+  ansible.builtin.command: systemctl --user reset-failed pcp.service # noqa: command-instead-of-module
+  changed_when: false
+  failed_when: false
+
+- name: Delete the container
+  containers.podman.podman_container:
+    name: pcp
+    state: absent
+
+- name: Delete the systemd unit file
+  ansible.builtin.file:
+    path: '{{ ansible_user_dir }}/.config/systemd/user/pcp.service'
+    state: absent
+
+- name: Delete the directory
+  ansible.builtin.file:
+    path: '{{ aap_volumes_dir }}/{{ item }}'
+    state: absent
+  become: true
+  loop:
+    - pcp_archives
+    - pcp
+
+- name: Delete firewalld rules
+  ansible.builtin.include_tasks: firewalld.yml
+  vars:
+    __firewalld_state: disabled
+...

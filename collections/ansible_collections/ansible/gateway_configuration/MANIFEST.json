@@ -1,0 +1,37 @@
+{
+ "collection_info": {
+  "namespace": "ansible",
+  "name": "gateway_configuration",
+  "version": "0.0.1",
+  "authors": [
+   "automation platform gateway project contributors <aap-project@googlegroups.com>",
+   "Sean Sullivan <@sean-m-sullivan>"
+  ],
+  "readme": "README.md",
+  "tags": [
+   "gateway",
+   "collection",
+   "gateway_configuration",
+   "automation_platform",
+   "infrastructure"
+  ],
+  "description": "A collection of roles to manage Ansible automation platform gateway",
+  "license": [
+   "GPLv3"
+  ],
+  "license_file": null,
+  "dependencies": {},
+  "repository": "https://github.com/ansible",
+  "documentation": null,
+  "homepage": "http://ansible.com/",
+  "issues": "https://access.redhat.com/support/"
+ },
+ "file_manifest_file": {
+  "name": "FILES.json",
+  "ftype": "file",
+  "chksum_type": "sha256",
+  "chksum_sha256": "c4c2ef3a8cb435b1b4e73ddca5b4559096c90329a1a667764c449bc5516f9e2d",
+  "format": 1
+ },
+ "format": 1
+}

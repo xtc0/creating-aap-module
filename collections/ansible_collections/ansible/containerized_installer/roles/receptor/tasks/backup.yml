@@ -1,0 +1,15 @@
+---
+- name: Archive the receptor data
+  ansible.containerized_installer.archive:
+    path:
+      - '{{ ansible_user_dir }}/aap/receptor'
+      - '{{ ansible_user_dir }}/aap/tls'
+    dest: '{{ ansible_user_dir }}/aap/backups/receptor.tar.gz'
+    mode: '0640'
+
+- name: Download the receptor tarball
+  ansible.builtin.fetch:
+    src: '{{ ansible_user_dir }}/aap/backups/receptor.tar.gz'
+    dest: '{{ hostvars["localhost"]["_backup_dir"] }}/receptor_{{ inventory_hostname }}.tar.gz'
+    flat: true
+...

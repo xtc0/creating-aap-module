@@ -1,0 +1,104 @@
+---
+- name: Ensure automation gateway is ready
+  ansible.builtin.uri:
+    url: '{{ _gateway_protocol }}://{{ _gateway_hostname }}:{{ _gateway_port }}/api/gateway/v1/ping/'
+    validate_certs: true
+    ca_path: '{{ _ca_tls_dir }}/extracted/pem/tls-ca-bundle.pem'
+  register: _gateway_ready
+  until: _gateway_ready.status == 200
+  retries: 30
+  delay: 10
+
+- name: Register services
+  ansible.builtin.include_role:
+    name: 'ansible.gateway_configuration.{{ gw_config_role }}'
+    apply:
+      environment:
+        SSL_CERT_FILE: '{{ _ca_tls_dir }}/extracted/pem/tls-ca-bundle.pem'
+  run_once: true
+  vars:
+    gateway_http_ports: '{{ gateway_proxy_vars.gateway_http_ports }}'
+    gateway_service_clusters: '{{  gateway_proxy_vars.gateway_service_clusters }}'
+    gateway_service_nodes: '{{ gateway_proxy_vars.gateway_service_nodes }}'
+    gateway_services: '{{ gateway_proxy_vars.gateway_services }}'
+    gateway_settings: '{{ gateway_proxy_vars.gateway_settings }}'
+    services: '{{ gateway_proxy_vars.gateway_services }}'
+    gateway_routes: '{{ gateway_proxy_vars.gateway_routes }}'
+    gateway_hostname: '{{ _gateway_protocol }}://{{ _gateway_hostname }}:{{ _gateway_port }}'
+    gateway_username: '{{ gateway_admin_user }}'
+    gateway_password: '{{ gateway_admin_password }}'
+    gateway_validate_certs: true
+    gateway_state: present
+  loop:
+    - settings
+    - http_ports
+    - service_clusters
+    - service_nodes
+    - services
+    - routes
+  loop_control:
+    loop_var: gw_config_role
+
+- name: Manage controller service key
+  when: groups.get('automationcontroller', []) | length > 0
+  run_once: true
+  block:
+    - name: Get all controller podman secrets
+      containers.podman.podman_secret_info:
+      register: _controller_secrets
+      delegate_to: '{{ groups["automationcontroller"] | first }}'
+
+    - name: Generate controller service key
+      ansible.builtin.include_tasks: service_key.yml
+      vars:
+        _component: controller
+      when: _controller_secrets.secrets | map(attribute='Spec') | selectattr('Name', 'equalto', 'controller_resource_server') | length == 0
+
+    - name: Set controller service key fact
+      ansible.builtin.set_fact:
+        __controller_service_key: '{{ _service_key.stdout | trim }}'
+      no_log: true
+      when: _controller_secrets.secrets | map(attribute='Spec') | selectattr('Name', 'equalto', 'controller_resource_server') | length == 0
+
+- name: Manage eda service key
+  when: groups.get('automationeda', []) | length > 0
+  run_once: true
+  block:
+    - name: Get all eda podman secrets
+      containers.podman.podman_secret_info:
+      register: _eda_secrets
+      delegate_to: '{{ groups["automationeda"] | first }}'
+
+    - name: Generate eda service key
+      ansible.builtin.include_tasks: service_key.yml
+      vars:
+        _component: eda
+      when: _eda_secrets.secrets | map(attribute='Spec') | selectattr('Name', 'equalto', 'eda_resource_server') | length == 0
+
+    - name: Set eda service key fact
+      ansible.builtin.set_fact:
+        __eda_service_key: '{{ _service_key.stdout | trim }}'
+      no_log: true
+      when: _eda_secrets.secrets | map(attribute='Spec') | selectattr('Name', 'equalto', 'eda_resource_server') | length == 0
+
+- name: Manage hub service key
+  when: groups.get('automationhub', []) | length > 0
+  run_once: true
+  block:
+    - name: Get all hub podman secrets
+      containers.podman.podman_secret_info:
+      register: _hub_secrets
+      delegate_to: '{{ groups["automationhub"] | first }}'
+
+    - name: Generate hub service key
+      ansible.builtin.include_tasks: service_key.yml
+      vars:
+        _component: galaxy
+      when: _hub_secrets.secrets | map(attribute='Spec') | selectattr('Name', 'equalto', 'hub_resource_server') | length == 0
+
+    - name: Set hub service key fact
+      ansible.builtin.set_fact:
+        __hub_service_key: '{{ _service_key.stdout | trim }}'
+      no_log: true
+      when: _hub_secrets.secrets | map(attribute='Spec') | selectattr('Name', 'equalto', 'hub_resource_server') | length == 0
+...

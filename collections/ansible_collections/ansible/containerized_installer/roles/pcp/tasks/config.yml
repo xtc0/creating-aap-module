@@ -1,0 +1,32 @@
+---
+- name: Create the performance co-pilot directory
+  ansible.builtin.file:
+    path: '{{ aap_volumes_dir }}/pcp_archives'
+    mode: '0770'
+    state: directory
+
+- name: Create the pcp config directory
+  ansible.builtin.file:
+    path: '{{ item }}'
+    mode: '0770'
+    state: directory
+  loop:
+    - '{{ pcp_conf_dir }}'
+    - '{{ pcp_conf_dir }}/openmetrics'
+    - '{{ pcp_conf_dir }}/openmetrics/config.d'
+
+- name: Configure pcp for automation controller
+  when: inventory_hostname in groups.get('automationcontroller', [])
+  block:
+    - name: Create the pcp openmetrics  NeedInstall file
+      ansible.builtin.file:
+        path: '{{ pcp_conf_dir }}/openmetrics/.NeedInstall'
+        mode: '0770'
+        state: touch
+
+    - name: Create the pcp openmetrics url file
+      ansible.builtin.template:
+        src: controller.url.j2
+        dest: '{{ pcp_conf_dir }}/openmetrics/config.d/controller.url'
+        mode: '0640'
+...

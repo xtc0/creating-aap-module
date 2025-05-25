@@ -1,0 +1,14 @@
+---
+- name: Archive the pcp data
+  ansible.containerized_installer.archive:
+    path:
+      - '{{ aap_volumes_dir }}/pcp_archives'
+    dest: '{{ hostvars["localhost"]["_backup_dir"] }}/pcp_{{ inventory_hostname }}.tar.gz'
+    mode: '0640'
+
+- name: Download the pcp tarball
+  ansible.builtin.fetch:
+    src: '{{ ansible_user_dir }}/aap/backups/pcp.tar.gz'
+    dest: '{{ hostvars["localhost"]["_backup_dir"] }}/pcp_{{ inventory_hostname }}.tar.gz'
+    flat: true
+...

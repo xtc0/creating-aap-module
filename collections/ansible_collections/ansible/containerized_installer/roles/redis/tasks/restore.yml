@@ -1,0 +1,30 @@
+---
+- name: Set redis facts
+  ansible.builtin.include_tasks: facts.yml
+
+- name: Stop redis systemd service
+  ansible.builtin.include_tasks: systemd.yml
+  vars:
+    __systemd_state: stopped
+
+- name: Unarchive the redis data
+  ansible.builtin.unarchive:
+    src: '{{ hostvars["localhost"]["_backup_dir"] }}/redis_{{ inventory_hostname }}.tar.gz'
+    dest: '{{ ansible_user_dir }}/aap'
+    exclude:
+      - 'tls/'
+      - 'aap/tls'
+      - '.local/share/containers/storage/secrets/'
+      - 'redis/server.key'
+      - 'redis/server.crt'
+
+- name: Reconfigure containers
+  ansible.builtin.include_tasks: containers.yml
+  vars:
+    __containers_recreate: true
+
+- name: Start redis systemd service
+  ansible.builtin.include_tasks: systemd.yml
+  vars:
+    __systemd_state: started
+...

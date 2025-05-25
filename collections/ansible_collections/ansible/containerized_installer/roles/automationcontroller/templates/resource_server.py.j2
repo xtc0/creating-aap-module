@@ -1,0 +1,5 @@
+RESOURCE_SERVER = {
+    'URL': '{{ hostvars[groups["automationgateway"][0]]["_gateway_proxy_url"] }}',
+    'SECRET_KEY': '{{ hostvars[groups["automationgateway"][0]]["__controller_service_key"] }}',
+    'VALIDATE_HTTPS': True,
+}

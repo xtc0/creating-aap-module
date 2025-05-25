@@ -1,0 +1,11 @@
+- hosts: simple.local
+  gather_facts: no
+  tasks:
+    - name: Say hello
+      yk.basic.hello_world:
+        user_name: "Sally"
+      register: result
+
+    - name: Print hello message
+      debug:
+        var: result.msg
