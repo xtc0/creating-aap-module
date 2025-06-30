@@ -20,7 +20,7 @@ xtc0/basic/
 8) Make sure to add documentation inside hello_world.py (Ansible Galaxy will extract info from here and fill in categories like Synopsis, Parameters, Examples, Return Values on Ansible Galaxy website)
 9) Go to directory where inventory file lies and create a playbook called test_hello.yml
 10) To run test_hello.yml playbook, use command: “ansible-playbook test_hello.yml”
-11) Fill in galaxy.yml (as seen in step 5’s tree structure)
+11) Fill in galaxy.yml (as seen in step 5’s tree structure). galaxy.yml file is essential metadata that tells Ansible Galaxy and users what your collection is, who made it, and how it should be used.
 12) Go to this file: xtc0/basic directory/meta/runtime.yml
 13) Uncomment the variable “requires_ansible” in runtime.yml
 14) Build the collection using “ansible-galaxy collection build”
