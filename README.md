@@ -1,3 +1,5 @@
+### Steps to create, build and publish an ansible collection (module included)
+
 In this repository, I will be sharing the steps to create, build and publish an ansible collection. I will create a module called "hello_world" in this collection.
 
 1) Successfully install AAP
@@ -32,3 +34,9 @@ xtc0/basic/
 22) Use this command: “ansible-galaxy collection publish xtc0-basic-1.0.0.tar.gz --api-key <your_api_key>”
 23) Once done, your collection will be live at: https://galaxy.ansible.com/xtc0/basic (change xtc0 to your own namespace/ Github username)
 24) You and others can now install your collection using: “ansible-galaxy collection install xtc0.basic”
+25) To test the collection, go to tests/test_hello.yml and change "user_name" variable
+
+### How to use module "hello_world" from xtc0.basic collection created
+
+1) ansible-galaxy collection install xtc0.basic
+2) Go to tests/test_hello.yml - copy the format there to your own playbook and make changes to "user_name" variable to see changes in the output
